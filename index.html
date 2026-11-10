@@ -159,7 +159,7 @@ function renderCart() {
     ${step && consent ? `<p style="margin:14px 0 6px;font-size:14px">¿Cómo lo recibís?</p>
       <span class="seg" id="seg"><button data-m="envio" class="${mode === "envio" ? "on" : ""}">Envío a domicilio</button><button data-m="retiro" class="${mode === "retiro" ? "on" : ""}">Retiro en sucursal</button></span>
       <select id="loc" aria-label="Barrio o sucursal" style="width:100%;margin-top:8px"><option value="">${mode === "envio" ? "Elegí tu barrio" : "Elegí una sucursal"}</option>${opts.map(o => `<option value="${o.loc}" ${o.loc === loc ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select>
-      ${locInfo ? `<p class="note">${locInfo.barrio ? `Precio recalculado para ${esc(locInfo.barrio)}.` : `Retiro en zona ${esc(locInfo.zone)}.`}</p>` : ""}
+      ${locInfo ? `<p class="note">${locInfo.barrio ? `Envío a ${esc(locInfo.barrio)}.` : `Retiro en sucursal.`}</p>` : ""}
       <p style="margin:14px 0 4px;font-size:14px">Medio de pago</p><select id="pago" style="width:100%">${[["credito", "Tarjeta de crédito"], ["debito", "Tarjeta de débito"], ["transferencia", "Transferencia"], ["efectivo", "Efectivo en sucursal"]].map(([v, l]) => `<option value="${v}" ${v === pago ? "selected" : ""}>${l}</option>`).join("")}</select>
 ` : ""}
     <div class="err" id="err"></div>
