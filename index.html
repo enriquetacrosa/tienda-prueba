@@ -85,8 +85,7 @@ footer{border-top:1px solid var(--line);color:var(--soft);font-size:13px;padding
 <header><div class="wrap hbar">
   <div class="logo">Farmacia Prueba ORT<small>Cremas y cuidado corporal</small></div>
   <div class="sp"></div>
-  <div class="where"><span class="seg" id="seg"><button data-m="envio" class="on">Envío</button><button data-m="retiro">Retiro</button></span>
-    <select id="loc" aria-label="Barrio o sucursal"><option value="">Cargando…</option></select></div>
+  <span class="status">Envío gratis en Montevideo o retiro en sucursal</span>
   <button class="btn ghost cartbtn" id="cartBtn">Carrito <b id="nCart" hidden>0</b></button>
 </div></header>
 
@@ -113,21 +112,22 @@ const norm = s => String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "
 
 // Catálogo de la tienda (el mismo bloque que lee PrecioZona)
 const catalog = JSON.parse($("#catalogo").textContent).map(p => ({ name: p.name, url: p.url }));
-let cfg = null, prices = {}, consent = null, mode = "envio", loc = "", cart = {}, step = 0, done = null, pago = "credito";
+let cfg = null, prices = {}, locPrices = {}, locInfo = null, consent = null, mode = "envio", loc = "", cart = {}, step = 0, done = null, pago = "credito";
 
 // Une cada producto de la tienda con su id en PrecioZona
 const pzId = p => { const m = cfg && cfg.products.find(x => norm(x.name) === norm(p.name) || x.url === p.url); return m ? m.id : null; };
 
+// Precios de las tarjetas: zona conocida + perfil. En el carrito, al elegir barrio: + ajuste del barrio.
 async function refresh() {
   consent = PrecioZona.consent();
-  if (consent) { const r = await PrecioZona.prices(loc).catch(() => ({ prices: {} })); prices = r.prices || {}; } else prices = {};
+  if (consent) {
+    const r = await PrecioZona.prices("").catch(() => ({ prices: {} })); prices = r.prices || {};
+    if (loc) { const l = await PrecioZona.prices(loc).catch(() => ({ prices: {} })); locPrices = l.prices || {}; locInfo = l; } else { locPrices = {}; locInfo = null; }
+  } else { prices = {}; locPrices = {}; locInfo = null; }
   render();
 }
+const cartPrice = id => (loc && locPrices[id] ? locPrices[id] : prices[id]) || {};
 function render() {
-  $("#seg").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.m === mode));
-  const opts = mode === "envio" ? cfg.barrios : cfg.pickups;
-  $("#loc").innerHTML = `<option value="">${mode === "envio" ? "Elegí tu barrio" : "Elegí una sucursal"}</option>` + opts.map(o => `<option value="${o.loc}">${esc(o.name)}</option>`).join("");
-  $("#loc").value = loc;
   $("#msg").innerHTML = !consent ? `<div class="alert">Aceptá las cookies para ver los precios y poder comprar. <button class="linkb" id="showCk">Ver el aviso</button></div>` : "";
   if (!consent) $("#showCk").onclick = () => PrecioZona.showBanner();
   $("#grid").innerHTML = catalog.map((p, i) => {
@@ -151,21 +151,28 @@ function renderCart() {
   const d = $("#drawer");
   if (done) { d.innerHTML = `<h2>Pedido confirmado</h2><p>Número <b>${esc(done.id)}</b> · total <b>${fmt(done.total)}</b></p><p class="note">Si volvés a comprar estos productos, vas a pagar el mismo precio.</p><button class="btn" id="close" style="width:100%">Seguir comprando</button>`; $("#close").onclick = () => { d.hidden = true; done = null; render(); }; return; }
   const items = Object.entries(cart).filter(([, q]) => q > 0).map(([i, q]) => ({ p: catalog[i], q, id: pzId(catalog[i]) }));
-  const total = consent ? items.reduce((a, x) => a + ((prices[x.id] || {}).price || 0) * x.q, 0) : 0;
+  const total = consent ? items.reduce((a, x) => a + (cartPrice(x.id).price || 0) * x.q, 0) : 0;
+  const opts = mode === "envio" ? cfg.barrios : cfg.pickups;
   d.innerHTML = `<h2>Carrito</h2>
-    ${items.length ? items.map(x => `<div class="line"><span>${esc(x.p.name)} × ${x.q}</span><span>${consent && prices[x.id] ? fmt(prices[x.id].price * x.q) : "—"}</span></div>`).join("") : `<p class="note">El carrito está vacío.</p>`}
+    ${items.length ? items.map(x => `<div class="line"><span>${esc(x.p.name)} × ${x.q}</span><span>${consent && cartPrice(x.id).price ? fmt(cartPrice(x.id).price * x.q) : "—"}</span></div>`).join("") : `<p class="note">El carrito está vacío.</p>`}
     ${items.length && consent ? `<div class="line"><b>Total</b><b>${fmt(total)}</b></div>` : ""}
-    ${step && consent ? `<p style="margin:14px 0 4px;font-size:14px">Medio de pago</p><select id="pago" style="width:100%">${[["credito", "Tarjeta de crédito"], ["debito", "Tarjeta de débito"], ["transferencia", "Transferencia"], ["efectivo", "Efectivo en sucursal"]].map(([v, l]) => `<option value="${v}" ${v === pago ? "selected" : ""}>${l}</option>`).join("")}</select>
-      <p class="note">${loc ? "Entrega: " + esc(($("#loc").selectedOptions[0] || {}).textContent || "") : "Elegí tu barrio o una sucursal arriba."}</p>` : ""}
+    ${step && consent ? `<p style="margin:14px 0 6px;font-size:14px">¿Cómo lo recibís?</p>
+      <span class="seg" id="seg"><button data-m="envio" class="${mode === "envio" ? "on" : ""}">Envío a domicilio</button><button data-m="retiro" class="${mode === "retiro" ? "on" : ""}">Retiro en sucursal</button></span>
+      <select id="loc" aria-label="Barrio o sucursal" style="width:100%;margin-top:8px"><option value="">${mode === "envio" ? "Elegí tu barrio" : "Elegí una sucursal"}</option>${opts.map(o => `<option value="${o.loc}" ${o.loc === loc ? "selected" : ""}>${esc(o.name)}</option>`).join("")}</select>
+      ${locInfo ? `<p class="note">${locInfo.barrio ? `Precio recalculado para ${esc(locInfo.barrio)}.` : `Retiro en zona ${esc(locInfo.zone)}.`}</p>` : ""}
+      <p style="margin:14px 0 4px;font-size:14px">Medio de pago</p><select id="pago" style="width:100%">${[["credito", "Tarjeta de crédito"], ["debito", "Tarjeta de débito"], ["transferencia", "Transferencia"], ["efectivo", "Efectivo en sucursal"]].map(([v, l]) => `<option value="${v}" ${v === pago ? "selected" : ""}>${l}</option>`).join("")}</select>
+` : ""}
     <div class="err" id="err"></div>
     <div class="actions">${items.length ? `<button class="btn" id="pay">${step && consent ? "Pagar" : "Finalizar compra"}</button>` : ""}<button class="btn ghost" id="close">Cerrar</button></div>`;
   $("#close").onclick = () => { d.hidden = true; step = 0; };
+  const sg = $("#seg"); if (sg) sg.onclick = e => { const b = e.target.closest("button"); if (b && b.dataset.m !== mode) { mode = b.dataset.m; loc = ""; refresh(); } };
+  const ls = $("#loc"); if (ls) ls.onchange = () => { loc = ls.value; refresh(); };
   const ps = $("#pago"); if (ps) ps.onchange = () => { pago = ps.value; };
   const pay = $("#pay"); if (pay) pay.onclick = async () => {
     try {
       if (!consent) { await PrecioZona.checkout([], loc, pago).catch(() => {}); await refresh(); return; } // muestra el cartel otra vez
       if (!step) { step = 1; PrecioZona.startCheckout(); renderCart(); return; }
-      if (!loc) { $("#err").textContent = "Elegí tu barrio o una sucursal arriba."; return; }
+      if (!loc) { $("#err").textContent = "Elegí tu barrio o una sucursal."; return; }
       const list = items.filter(x => x.id).map(x => ({ id: x.id, q: x.q }));
       if (!list.length) { $("#err").textContent = "Estos productos todavía no están cargados en PrecioZona."; return; }
       done = await PrecioZona.checkout(list, loc, pago); cart = {}; step = 0; await refresh(); d.hidden = false; renderCart();
@@ -173,8 +180,6 @@ function renderCart() {
   };
 }
 
-$("#seg").onclick = e => { const b = e.target.closest("button"); if (b && b.dataset.m !== mode) { mode = b.dataset.m; loc = ""; refresh(); } };
-$("#loc").onchange = () => { loc = $("#loc").value; PrecioZona.setLocation(loc); refresh(); };
 $("#cartBtn").onclick = () => { $("#drawer").hidden = false; renderCart(); };
 $("#resetCk").onclick = async () => { await PrecioZona.reset(); await refresh(); };
 
